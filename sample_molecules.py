@@ -1,4 +1,4 @@
-import moltimol_helper as molmol
+import moltimol as molmol
 import numpy as np
 import psi4
 
