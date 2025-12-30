@@ -12,9 +12,17 @@ coordinates, which is useful for sampling potential energy surfaces (PESs).
 
 Optional:
 - ase (for full periodic table support for atomic masses)
+- pytest (to run tests)
 
 ## Files
 
 - `moltimol_helper.py` — helper functions
+- `moltimol/` — package implementation
 - `sample_molecules.py` — example script generating XYZ geometries
 - `CO.xyz` — example monomer input
+
+## Tests
+
+```bash
+pytest
+```
