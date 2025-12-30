@@ -101,7 +101,7 @@ def jacobi_vector(R, theta, phi):
     ])
 
 
-def center_of_mass(symbols, coords):
+def center_of_mass_symbols(symbols, coords):
     """
     Shift coordinates so that COM = 0.
     """
@@ -109,6 +109,125 @@ def center_of_mass(symbols, coords):
     m = np.array([mass_of(s) for s in symbols]).reshape(-1, 1)
     com = np.sum(coords * m, axis=0) / np.sum(m)
     return coords - com
+
+#
+# utilities for projecting to dimer frame  
+#
+
+def _unit(v, eps=1e-14):
+    v = np.asarray(v, float)
+    n = np.linalg.norm(v)
+    if n < eps:
+        raise ValueError("Cannot normalize near-zero vector.")
+    return v / n
+
+def center_of_geometry(X):
+    X = np.asarray(X, float)
+    return X.mean(axis=0)
+
+def center_of_mass_mass(X, masses):
+    X = np.asarray(X, float)
+    m = np.asarray(masses, float)
+    return (X * m[:, None]).sum(axis=0) / m.sum()
+
+
+def center_of_mass(a, b):
+    """
+    Center of mass utility supporting:
+      - (symbols, coords) -> COM-shifted coords
+      - (coords, masses)  -> COM vector
+    """
+    a_arr = np.asarray(a)
+    b_arr = np.asarray(b)
+    if a_arr.ndim == 1 and b_arr.ndim == 2:
+        return center_of_mass_symbols(a, b)
+    if a_arr.ndim == 2 and b_arr.ndim == 1:
+        return center_of_mass_mass(a, b)
+    raise ValueError("center_of_mass expects (symbols, coords) or (coords, masses).")
+
+def axis_from_atoms(X, i, j):
+    """Unit vector from atom i to atom j in coordinates X."""
+    X = np.asarray(X, float)
+    return _unit(X[j] - X[i])
+
+def build_dimer_frame(
+    XA, XB,
+    refA="cog", refB="cog",
+    massesA=None, massesB=None,
+    axisA=None, axisB=None,
+    eps=1e-10,
+):
+    """
+    Returns (origin, ex, ey, ez, B) where columns of B are [ex, ey, ez].
+    You can project vectors with mu_body = B.T @ mu_lab.
+    """
+
+    XA = np.asarray(XA, float)
+    XB = np.asarray(XB, float)
+
+    # Reference points RA, RB
+    if refA == "com":
+        if massesA is None: raise ValueError("massesA required for refA='com'")
+        RA = center_of_mass(XA, massesA)
+    else:
+        RA = center_of_geometry(XA)
+
+    if refB == "com":
+        if massesB is None: raise ValueError("massesB required for refB='com'")
+        RB = center_of_mass(XB, massesB)
+    else:
+        RB = center_of_geometry(XB)
+
+    # Dimer axis ez (A -> B)
+    R = RB - RA
+    ez = _unit(R)
+
+    # Choose an in-plane vector u to define ex (prefer axisA, else axisB, else fallback axis)
+    def proj_perp(u, ez):
+        return u - np.dot(u, ez) * ez
+
+    # Build u from axis specs if provided:
+    # axisA can be a 3-vector or a tuple (i,j) atom indices in A
+    u_candidates = []
+    if axisA is not None:
+        if isinstance(axisA, tuple):
+            u_candidates.append(axis_from_atoms(XA, axisA[0], axisA[1]))
+        else:
+            u_candidates.append(_unit(axisA))
+    if axisB is not None:
+        if isinstance(axisB, tuple):
+            u_candidates.append(axis_from_atoms(XB, axisB[0], axisB[1]))
+        else:
+            u_candidates.append(_unit(axisB))
+
+    # Always provide a safe fallback
+    u_candidates += [np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])]
+
+    ex = None
+    for u in u_candidates:
+        xp = proj_perp(u, ez)
+        if np.linalg.norm(xp) > eps:
+            ex = _unit(xp)
+            break
+    if ex is None:
+        raise ValueError("Failed to build a stable ex axis (degenerate geometry).")
+
+    ey = _unit(np.cross(ez, ex))  # right-handed
+    # Re-orthogonalize ex (numerical safety)
+    ex = _unit(np.cross(ey, ez))
+
+    # Choose an origin for reporting (midpoint between monomer refs is common)
+    origin = 0.5 * (RA + RB)
+
+    # Basis matrix: columns are basis vectors in lab XYZ
+    B = np.column_stack([ex, ey, ez])
+    return origin, ex, ey, ez, B
+
+def project_to_dimer_frame(mu_lab, B):
+    """mu_body = [mu_x, mu_y, mu_z] in the dimer frame."""
+    mu_lab = np.asarray(mu_lab, float)
+    return B.T @ mu_lab
+
 
 
 def add_cartesian_noise(symbols, coords, sigma=0.1):
