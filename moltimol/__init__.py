@@ -150,6 +150,68 @@ def axis_from_atoms(X, i, j):
     X = np.asarray(X, float)
     return _unit(X[j] - X[i])
 
+def principal_axis(X, masses=None, eps=1e-14):
+    """
+    Unit vector along a principal axis of inertia (smallest eigenvalue).
+    """
+    X = np.asarray(X, float)
+    if masses is None:
+        m = np.ones(len(X))
+    else:
+        m = np.asarray(masses, float)
+
+    C = center_of_mass(X, m)
+    Y = X - C
+    I = np.zeros((3, 3))
+    for ri, mi in zip(Y, m):
+        r2 = float(ri @ ri)
+        I += mi * (r2 * np.eye(3) - np.outer(ri, ri))
+
+    w, V = np.linalg.eigh(I)
+    v = V[:, np.argmin(w)]
+    return _unit(v, eps=eps)
+
+def build_dimer_frame_principal(
+    XA, XB,
+    massesA=None, massesB=None,
+    eps=1e-10,
+):
+    """
+    Build a dimer frame using COMs and principal axes of inertia.
+    Returns (origin, ex, ey, ez, B) where columns of B are [ex, ey, ez].
+    """
+    XA = np.asarray(XA, float)
+    XB = np.asarray(XB, float)
+
+    if massesA is None or massesB is None:
+        raise ValueError("massesA and massesB are required for principal-axis frame.")
+
+    RA = center_of_mass(XA, massesA)
+    RB = center_of_mass(XB, massesB)
+    ez = _unit(RB - RA)
+
+    uA = principal_axis(XA, massesA, eps=eps)
+    uB = principal_axis(XB, massesB, eps=eps)
+
+    def proj_perp(u, ez):
+        return u - np.dot(u, ez) * ez
+
+    ex = None
+    for u in (uA, uB, np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])):
+        xp = proj_perp(u, ez)
+        if np.linalg.norm(xp) > eps:
+            ex = _unit(xp, eps=eps)
+            break
+    if ex is None:
+        raise ValueError("Failed to build a stable ex axis (degenerate geometry).")
+
+    ey = _unit(np.cross(ez, ex), eps=eps)
+    ex = _unit(np.cross(ey, ez), eps=eps)
+
+    origin = 0.5 * (RA + RB)
+    B = np.column_stack([ex, ey, ez])
+    return origin, ex, ey, ez, B
+
 def build_dimer_frame(
     XA, XB,
     refA="cog", refB="cog",
