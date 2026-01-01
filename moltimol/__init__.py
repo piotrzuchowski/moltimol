@@ -125,46 +125,23 @@ def _unit(v, eps=1e-14):
         raise ValueError("Cannot normalize near-zero vector.")
     return v / n
 
-def inertia_tensor(X, masses):
-    """Inertia tensor about the COM. Units: mass*length^2 (consistent with X units)."""
-    X = np.asarray(X, float)
+def principal_axis(coords, masses, eps=1e-14):
+    """
+    Unit vector along a principal axis of inertia (smallest eigenvalue).
+    """
+    X = np.asarray(coords, float)
     m = np.asarray(masses, float)
-    R = center_of_mass_mass(X, m)
-    r = X - R
-    I = np.zeros((3, 3), float)
-    for mi, ri in zip(m, r):
-        r2 = float(np.dot(ri, ri))
+    C = center_of_mass_mass(X, m)
+    Y = X - C
+
+    I = np.zeros((3, 3))
+    for ri, mi in zip(Y, m):
+        r2 = float(ri @ ri)
         I += mi * (r2 * np.eye(3) - np.outer(ri, ri))
-    return I
 
-
-def principal_axis(X, masses, which="min", eps=1e-12):
-    """
-    Return a signed principal axis eigenvector (unit).
-    which="min" -> axis of smallest principal moment (good for linear molecules)
-    which="max" -> axis of largest principal moment (often plane-normal for planar molecules)
-    """
-    I = inertia_tensor(X, masses)
-    vals, vecs = np.linalg.eigh(I)  # columns are eigenvectors
-    idx = int(np.argmin(vals) if which == "min" else np.argmax(vals))
-    u = vecs[:, idx]
-
-    # Fix sign deterministically so it doesn't randomly flip
-    X = np.asarray(X, float)
-    m = np.asarray(masses, float)
-    R = center_of_mass_mass(X, m)
-    maxm = np.max(m)
-    cand = np.where(np.isclose(m, maxm))[0]
-    if len(cand) > 1:
-        d = np.linalg.norm(X[cand] - R, axis=1)
-        anchor_idx = int(cand[np.argmax(d)])
-    else:
-        anchor_idx = int(cand[0])
-    anchor = X[anchor_idx] - R
-    if np.linalg.norm(anchor) > eps and np.dot(u, anchor) < 0.0:
-        u = -u
-
-    return _unit(u, eps)
+    w, V = np.linalg.eigh(I)
+    v = V[:, np.argmin(w)]
+    return _unit(v, eps=eps)
 
 def build_dimer_frame_principal(
     XA, XB,
@@ -329,7 +306,7 @@ def build_dimer_frame_COM(
     Build a right-handed dimer frame.
       ez: along COM(A)->COM(B)
       ex: in plane perpendicular to  ez, from projected reference vector (uA preferred, then uB, then lab axis)
-      ey: ez \otimes  ex
+      ey: ez x ex
 
     Inputs:
       XA, XB : (NA,3), (NB,3) coordinates in any length unit
@@ -356,17 +333,14 @@ def build_dimer_frame_COM(
     RB = center_of_mass_mass(XB, massesB)
 
     ez = _unit(RB - RA, eps)
-    if ez is None:
-        raise ValueError("COM(A) == COM(B): cannot define dimer axis ez.")
-
     # choose reference vectors if not provided
     if uA is None:
-        uA = principal_axis(XA, massesA, which=principalA, eps=eps)
+        uA = principal_axis(XA, massesA,  eps=eps)
     else:
         uA = _unit(uA, eps)
 
     if uB is None:
-        uB = principal_axis(XB, massesB, which=principalB, eps=eps)
+        uB = principal_axis(XB, massesB,  eps=eps)
     else:
         uB = _unit(uB, eps)
 
