@@ -78,7 +78,10 @@ for i in range(Nsamples):
     total_atoms = len(symbols)
     with open(sample_filename, "w") as f:
         f.write(f"{total_atoms}\n")
-        f.write(f"{total_atoms} {n_atoms_A} {n_atoms_B}\n")
+        f.write(
+            f"{total_atoms} {n_atoms_A} {n_atoms_B} "
+            "symmetry c1; no_reorient; no_com; units angstrom\n"
+        )
         for sym, (x, y, z) in zip(symbols, coords_body):
             f.write(f"{sym} {x:.10f} {y:.10f} {z:.10f}\n")
 

@@ -5,9 +5,11 @@ import numpy as np
 from moltimol.dipoles_helper import (
     E_charge_tt,
     T_dipole_tt,
+    mbis_charges_rhf_aug_cc_pvdz,
     dimer_dipole_charges_polarizable,
     f_tt,
 )
+from moltimol import build_dimer_frame_COM, mass_of
 
 
 def _co_coords():
@@ -63,7 +65,47 @@ class TestDipolesHelper(unittest.TestCase):
             XA, XB, qA, qB, alphaA, alphaB, mutual=False
         )
         self.assertTrue(np.allclose(out["mu_ind"], 0.0, atol=1e-12))
-        self.assertTrue(np.allclose(out["mu_lab"], out["mu_perm_q"], atol=1e-12))
+        self.assertTrue(np.allclose(out["mu_lab"], 0.0, atol=1e-12))
+
+    def test_build_dimer_frame_com_coords(self):
+        XA = _co_coords()
+        XB = _co_coords() + np.array([0.0, 0.0, 10.0])
+        coords = np.vstack([XA, XB])
+        n_atoms_A = len(XA)
+        massesA = np.array([mass_of("C"), mass_of("O")])
+        massesB = np.array([mass_of("C"), mass_of("O")])
+
+        origin, ex, ey, ez, B = build_dimer_frame_COM(
+            XA, XB,
+            massesA=massesA, massesB=massesB,
+            principalA="min", principalB="min",
+            origin="midpoint",
+        )
+        coords_body = (coords - origin) @ B
+
+        self.assertEqual(coords_body.shape, coords.shape)
+        self.assertAlmostEqual(np.linalg.norm(ex), 1.0, places=12)
+        self.assertAlmostEqual(np.linalg.norm(ey), 1.0, places=12)
+        self.assertAlmostEqual(np.linalg.norm(ez), 1.0, places=12)
+        self.assertAlmostEqual(np.dot(ex, ey), 0.0, places=12)
+        self.assertAlmostEqual(np.dot(ex, ez), 0.0, places=12)
+        self.assertAlmostEqual(np.dot(ey, ez), 0.0, places=12)
+
+    def test_mbis_charges_co(self):
+        try:
+            import psi4  # noqa: F401
+        except Exception:
+            self.skipTest("psi4 not available")
+
+        geo = """
+        0 1
+        C 0.000000 0.000000 -0.644
+        O 0.000000 0.000000  0.484
+        """
+        charges = mbis_charges_rhf_aug_cc_pvdz(geo, scf_options={"scf_type": "direct"})
+        print("charges of CO molecule:", charges)
+        self.assertEqual(len(charges), 2)
+        self.assertAlmostEqual(float(np.sum(charges)), 0.0, places=6)
 
 
 if __name__ == "__main__":
