@@ -26,3 +26,13 @@ Optional:
 ```bash
 pytest
 ```
+
+Dipole frame consistency test:
+
+```bash
+pytest -k dipole_rotation_consistency
+```
+
+This test builds a random CO–CO dimer, rotates it into the principal-axis
+dimer frame, computes Psi4 dipoles in both frames, and checks that the body-frame
+dipole matches the lab-frame dipole rotated by the frame matrix `B`.

@@ -1,3 +1,13 @@
+"""
+Lightweight helpers for generating and transforming molecular dimers.
+
+Conventions:
+- Coordinates are in angstrom unless otherwise noted.
+- Frame builders return (origin, ex, ey, ez, B) with B columns [ex, ey, ez].
+  Transform coords: X_body = (X - origin) @ B
+  Transform vectors: v_body = B.T @ v_lab
+"""
+
 import numpy as np
 import warnings
 import psi4
@@ -103,7 +113,7 @@ def jacobi_vector(R, theta, phi):
 
 def center_of_mass(symbols, coords):
     """
-    Shift coordinates so that COM = 0.
+    Shift coordinates so that COM = 0 (symbols are element symbols).
     """
     # mass_of(...) returns atomic mass in atomic mass units (u)
     m = np.array([mass_of(s) for s in symbols]).reshape(-1, 1)
@@ -125,23 +135,46 @@ def _unit(v, eps=1e-14):
         raise ValueError("Cannot normalize near-zero vector.")
     return v / n
 
-def principal_axis(coords, masses, eps=1e-14):
-    """
-    Unit vector along a principal axis of inertia (smallest eigenvalue).
-    """
-    X = np.asarray(coords, float)
+def inertia_tensor(X, masses):
+    """Inertia tensor about the COM. Units: mass*length^2 (consistent with X units)."""
+    X = np.asarray(X, float)
     m = np.asarray(masses, float)
-    C = center_of_mass_mass(X, m)
-    Y = X - C
-
-    I = np.zeros((3, 3))
-    for ri, mi in zip(Y, m):
-        r2 = float(ri @ ri)
+    R = center_of_mass_mass(X, m)
+    r = X - R
+    I = np.zeros((3, 3), float)
+    for mi, ri in zip(m, r):
+        r2 = float(np.dot(ri, ri))
         I += mi * (r2 * np.eye(3) - np.outer(ri, ri))
+    return I
 
-    w, V = np.linalg.eigh(I)
-    v = V[:, np.argmin(w)]
-    return _unit(v, eps=eps)
+
+def principal_axis(X, masses, which="min", eps=1e-12):
+    """
+    Return a signed principal axis eigenvector (unit).
+    which="min" -> axis of smallest principal moment (good for linear molecules)
+    which="max" -> axis of largest principal moment (often plane-normal for planar molecules)
+    """
+    I = inertia_tensor(X, masses)
+    vals, vecs = np.linalg.eigh(I)  # columns are eigenvectors
+    idx = int(np.argmin(vals) if which == "min" else np.argmax(vals))
+    u = vecs[:, idx]
+
+    # Fix sign deterministically so it doesn't randomly flip
+    X = np.asarray(X, float)
+    m = np.asarray(masses, float)
+    R = center_of_mass_mass(X, m)
+    maxm = np.max(m)
+    cand = np.where(np.isclose(m, maxm))[0]
+    if len(cand) > 1:
+        d = np.linalg.norm(X[cand] - R, axis=1)
+        anchor_idx = int(cand[np.argmax(d)])
+    else:
+        anchor_idx = int(cand[0])
+    anchor = X[anchor_idx] - R
+    if np.linalg.norm(anchor) > eps and np.dot(u, anchor) < 0.0:
+        u = -u
+
+    return _unit(u, eps)
 
 def build_dimer_frame_principal(
     XA, XB,
@@ -159,8 +192,8 @@ def build_dimer_frame_principal(
     RB = center_of_mass_mass(XB, massesB)
     ez = _unit(RB - RA, eps=eps)
 
-    uA = principal_axis(XA, massesA, eps=eps)
-    uB = principal_axis(XB, massesB, eps=eps)
+    uA = principal_axis(XA, massesA, which="min", eps=eps)
+    uB = principal_axis(XB, massesB, which="min", eps=eps)
 
     def proj_perp(u, ez):
         return u - np.dot(u, ez) * ez
@@ -276,11 +309,11 @@ def merge_monomers_jacobi_XYZ(
     coords_B = coords[len(symA):]
 
     mol_string = (
-    "units angstrom\n"
-    "symmetry c1\n"
-    "no_reorient\n"
-    "no_com\n"
-    "0 1\n"
+        "units angstrom\n"
+        "symmetry c1\n"
+        "no_reorient\n"
+        "no_com\n"
+        "0 1\n"
     )
     for s, c in zip(symA, coords_A):
         mol_string += f"{s} {c[0]:.10f} {c[1]:.10f} {c[2]:.10f}\n"
@@ -335,12 +368,12 @@ def build_dimer_frame_COM(
     ez = _unit(RB - RA, eps)
     # choose reference vectors if not provided
     if uA is None:
-        uA = principal_axis(XA, massesA,  eps=eps)
+        uA = principal_axis(XA, massesA, which=principalA, eps=eps)
     else:
         uA = _unit(uA, eps)
 
     if uB is None:
-        uB = principal_axis(XB, massesB,  eps=eps)
+        uB = principal_axis(XB, massesB, which=principalB, eps=eps)
     else:
         uB = _unit(uB, eps)
 

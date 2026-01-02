@@ -9,7 +9,14 @@ from moltimol.dipoles_helper import (
     dimer_dipole_charges_polarizable,
     f_tt,
 )
-from moltimol import build_dimer_frame_COM, mass_of
+from moltimol import (
+    build_dimer_frame_COM,
+    build_dimer_frame_principal,
+    jacobi_vector,
+    mass_of,
+    read_xyz,
+    rotation_matrix_from_euler,
+)
 
 
 def _co_coords():
@@ -18,6 +25,39 @@ def _co_coords():
         [0.0, 0.0, -0.644],
         [0.0, 0.0, 0.484],
     ])
+
+def _psi4_dipole_from_xyz(symbols, coords):
+    import psi4
+
+    mol_string = (
+        "units angstrom\n"
+        "symmetry c1\n"
+        "no_reorient\n"
+        "no_com\n"
+        "0 1\n"
+    )
+    for s, c in zip(symbols, coords):
+        mol_string += f"{s} {c[0]:.10f} {c[1]:.10f} {c[2]:.10f}\n"
+
+    mol = psi4.geometry(mol_string)
+    psi4.set_options({"basis": "sto-3g", "scf_type": "direct"})
+    _, wfn = psi4.properties("HF", properties=["DIPOLE"], molecule=mol, return_wfn=True)
+    for var in ("CURRENT DIPOLE", "DIPOLE", "SCF DIPOLE"):
+        try:
+            return np.array(wfn.variable(var), dtype=float)
+        except Exception:
+            continue
+    for var in ("CURRENT DIPOLE", "DIPOLE", "SCF DIPOLE"):
+        try:
+            return np.array(psi4.core.get_variable(var), dtype=float)
+        except Exception:
+            continue
+    for var in ("CURRENT DIPOLE", "DIPOLE", "SCF DIPOLE"):
+        try:
+            return np.array(psi4.core.variable(var), dtype=float)
+        except Exception:
+            continue
+    raise RuntimeError("Dipole not found in Psi4 wavefunction variables.")
 
 
 class TestDipolesHelper(unittest.TestCase):
@@ -106,6 +146,48 @@ class TestDipolesHelper(unittest.TestCase):
         print("charges of CO molecule:", charges)
         self.assertEqual(len(charges), 2)
         self.assertAlmostEqual(float(np.sum(charges)), 0.0, places=6)
+
+    def test_dipole_rotation_consistency(self):
+        try:
+            import psi4  # noqa: F401
+        except Exception:
+            self.skipTest("psi4 not available")
+
+        symbolsA, XA = read_xyz("CO.xyz")
+        symbolsB, XB = read_xyz("CO.xyz")
+        np.random.seed(0)
+        R = 4.5
+        theta = np.arccos(1 - 2 * np.random.uniform(0, 1))
+        phi = np.random.uniform(0, 2 * np.pi)
+        u1, u2, u3 = np.random.rand(3)
+        eulerA = (0.0, 0.0, 0.0)
+        eulerB = (2 * np.pi * u1, np.arccos(2 * u2 - 1), 2 * np.pi * u3)
+
+        RA = rotation_matrix_from_euler(*eulerA)
+        RB = rotation_matrix_from_euler(*eulerB)
+        A_rot = XA @ RA.T
+        B_rot = XB @ RB.T
+        R_vec = jacobi_vector(R, theta, phi)
+        B_global = B_rot + R_vec
+
+        coords = np.vstack([A_rot, B_global])
+        symbols = list(symbolsA) + list(symbolsB)
+        n_atoms_A = len(symbolsA)
+        XA_d = coords[:n_atoms_A]
+        XB_d = coords[n_atoms_A:]
+
+        massesA = np.array([mass_of(s) for s in symbolsA])
+        massesB = np.array([mass_of(s) for s in symbolsB])
+        origin, ex, ey, ez, B = build_dimer_frame_principal(
+            XA_d, XB_d, massesA, massesB
+        )
+        coords_body = (coords - origin) @ B
+
+        mu_lab = _psi4_dipole_from_xyz(symbols, coords)
+        mu_body_calc = _psi4_dipole_from_xyz(symbols, coords_body)
+        mu_body_rot = B.T @ mu_lab
+
+        self.assertTrue(np.allclose(mu_body_calc, mu_body_rot, atol=1e-6))
 
 
 if __name__ == "__main__":

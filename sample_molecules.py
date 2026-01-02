@@ -26,6 +26,7 @@ psi4.set_options({
 # # Generate multiple samples with noise
 #
 Nsamples=3
+WRITE_BOTH_FRAMES = True
 
 fileA = "CO.xyz"
 fileB = "CO.xyz"
@@ -69,6 +70,8 @@ for i in range(Nsamples):
         sigma_noise=0.1  # Increased noise for sampling
     )
     sample_filename = f"dimer_sample_{i+1:03d}.xyz"
+    lab_filename = f"LabFix_{i+1:03d}.xyz"
+    body_filename = f"BodyFix_{i+1:03d}.xyz"
     XA = coords[:n_atoms_A]
     XB = coords[n_atoms_A:]
     origin, ex, ey, ez, B = molmol.build_dimer_frame_principal(
@@ -84,5 +87,27 @@ for i in range(Nsamples):
         )
         for sym, (x, y, z) in zip(symbols, coords_body):
             f.write(f"{sym} {x:.10f} {y:.10f} {z:.10f}\n")
+
+    if WRITE_BOTH_FRAMES:
+        for filename, frame_coords in (
+            (lab_filename, coords),
+            (body_filename, coords_body),
+        ):
+            with open(filename, "w") as f:
+                f.write(f"{total_atoms}\n")
+                f.write(
+                    f"{total_atoms} {n_atoms_A} {n_atoms_B} "
+                    "symmetry c1; no_reorient; no_com; units angstrom\n"
+                )
+                for sym, (x, y, z) in zip(symbols, frame_coords):
+                    f.write(f"{sym} {x:.10f} {y:.10f} {z:.10f}\n")
+
+    print("Atom  Lab(x,y,z) -> Body(x,y,z)")
+    for sym, lab, body in zip(symbols, coords, coords_body):
+        print(
+            f"{sym:2s} "
+            f"{lab[0]: .6f} {lab[1]: .6f} {lab[2]: .6f}  ->  "
+            f"{body[0]: .6f} {body[1]: .6f} {body[2]: .6f}"
+        )
 
     print(f"Wrote geometry: {sample_filename}")
