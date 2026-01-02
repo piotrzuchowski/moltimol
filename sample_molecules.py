@@ -1,5 +1,4 @@
 import moltimol as molmol
-from moltimol.dipoles_helper import mbis_properties_rhf_aug_cc_pvdz
 import numpy as np
 import psi4
 
@@ -34,10 +33,6 @@ with open(fileA, "r") as f:
     molA_geo = f.read()
 with open(fileB, "r") as f:
     molB_geo = f.read()
-props_A = mbis_properties_rhf_aug_cc_pvdz(molA_geo, scf_options={"scf_type": "direct"})
-props_B = mbis_properties_rhf_aug_cc_pvdz(molB_geo, scf_options={"scf_type": "direct"})
-print("MBIS properties (A):", props_A)
-print("MBIS properties (B):", props_B)
 
 symA, _ = molmol.read_xyz("CO.xyz")
 symB, _ = molmol.read_xyz("CO.xyz")
