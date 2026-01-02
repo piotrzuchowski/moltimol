@@ -14,6 +14,140 @@ def f_tt(n, x):
             term *= x / (k + 1)
     return 1.0 - np.exp(-x) * s
 
+
+def _get_mbis_variable(wfn, keys):
+    for key in keys:
+        try:
+            return np.array(wfn.variable(key), dtype=float)
+        except Exception:
+            continue
+    return None
+
+
+def compute_mbis_charges(
+    geometry,
+    method="HF",
+    basis="aug-cc-pvdz",
+    scf_options=None,
+):
+    """
+    Compute MBIS charges with Psi4 and return them as a NumPy array.
+    geometry can be a Psi4 molecule or a Psi4-format geometry string.
+    """
+    if isinstance(geometry, psi4.core.Molecule):
+        mol = geometry
+    elif isinstance(geometry, str):
+        mol = psi4.core.Molecule.from_string(geometry)
+    else:
+        raise TypeError("geometry must be a Psi4 molecule or a Psi4 geometry string.")
+
+    mol.update_geometry()
+
+    psi4.set_options({"basis": basis})
+    if scf_options:
+        psi4.set_options(scf_options)
+
+    method_key = method.lower()
+    if method_key == "rhf":
+        method = "HF"
+
+    _, wfn = psi4.properties(
+        method,
+        properties=["MBIS_CHARGES"],
+        molecule=mol,
+        return_wfn=True,
+    )
+
+    charges = _get_mbis_variable(wfn, ("MBIS CHARGES", "MBIS_CHARGES"))
+    if charges is None:
+        raise RuntimeError("MBIS charges not found in Psi4 wavefunction variables.")
+    return charges
+
+
+def compute_mbis_properties(
+    geometry,
+    method="HF",
+    basis="aug-cc-pvdz",
+    scf_options=None,
+):
+    """
+    Compute MBIS properties (charges, dipoles, volumes) with Psi4.
+    Returns a dict with any available arrays.
+    """
+    if isinstance(geometry, psi4.core.Molecule):
+        mol = geometry
+    elif isinstance(geometry, str):
+        mol = psi4.core.Molecule.from_string(geometry)
+    else:
+        raise TypeError("geometry must be a Psi4 molecule or a Psi4 geometry string.")
+
+    mol.update_geometry()
+
+    psi4.set_options({"basis": basis})
+    if scf_options:
+        psi4.set_options(scf_options)
+
+    method_key = method.lower()
+    if method_key == "rhf":
+        method = "HF"
+
+    _, wfn = psi4.properties(
+        method,
+        properties=["MBIS_CHARGES"],
+        molecule=mol,
+        return_wfn=True,
+    )
+
+    props = {}
+    charges = _get_mbis_variable(wfn, ("MBIS CHARGES", "MBIS_CHARGES"))
+    dipoles = _get_mbis_variable(wfn, ("MBIS DIPOLES", "MBIS_DIPOLES"))
+    radial_r3 = _get_mbis_variable(
+        wfn,
+        ("MBIS RADIAL MOMENTS <R^3>", "MBIS_RADIAL_MOMENTS_R3"),
+    )
+
+    if charges is not None:
+        props["charges"] = charges
+    if dipoles is not None:
+        props["dipoles"] = dipoles
+    if radial_r3 is not None:
+        props["radial_moments_r3"] = radial_r3
+
+    if not props:
+        raise RuntimeError("No MBIS properties found in Psi4 wavefunction variables.")
+
+    return props
+
+
+def mbis_charges_hf_aug_cc_pvdz(geometry, scf_options=None):
+    """Convenience wrapper for HF/aug-cc-pvdz MBIS charges."""
+    return compute_mbis_charges(
+        geometry,
+        method="HF",
+        basis="aug-cc-pvdz",
+        scf_options=scf_options,
+    )
+
+
+def mbis_charges_rhf_aug_cc_pvdz(geometry, scf_options=None):
+    """Alias for HF/aug-cc-pvdz MBIS charges (Psi4 properties use HF)."""
+    return mbis_charges_hf_aug_cc_pvdz(geometry, scf_options=scf_options)
+
+
+def mbis_properties_hf_aug_cc_pvdz(geometry, scf_options=None):
+    """Convenience wrapper for HF/aug-cc-pvdz MBIS properties."""
+    return compute_mbis_properties(
+        geometry,
+        method="HF",
+        basis="aug-cc-pvdz",
+        scf_options=scf_options,
+    )
+
+
+def mbis_properties_rhf_aug_cc_pvdz(geometry, scf_options=None):
+    """Alias for HF/aug-cc-pvdz MBIS properties (Psi4 properties use HF)."""
+    return mbis_properties_hf_aug_cc_pvdz(geometry, scf_options=scf_options)
+
 def T_dipole_tt(R, b):
     """
     TT-damped dipole tensor:
@@ -139,7 +273,6 @@ def dimer_dipole_charges_polarizable(
     qA, qB,
     alphaA, alphaB,
     massesA=None, massesB=None,
-    mutual=True,
     include_intra=False,
     c_scale=2.8,
 ):
@@ -154,7 +287,6 @@ def dimer_dipole_charges_polarizable(
       XA (NA,3), XB (NB,3): coordinates in bohr
       qA (NA,), qB (NB,)  : atomic partial charges (e)
       alphaA (NA,), alphaB (NB,): isotropic polarizabilities (a0^3), can be 0 for nonpolarizable atoms
-      mutual: solve self-consistent induction (recommended)
       include_intra: include intramolecular polarization couplings (often False for “intermolecular-only” baseline)
       c_scale: TT range factor; b_ij = c_scale / ell_ij. (larger -> stronger damping at given R)
 
@@ -171,7 +303,7 @@ def dimer_dipole_charges_polarizable(
     alpha = np.concatenate([alphaA, alphaB])
     mon = np.array([0]*len(XA) + [1]*len(XB), dtype=int)
 
-    # origin convention (only matters if total charge != 0)
+    # origin convention for ions, dimers: midpoint of monomer COMs
     origin, B = build_dimer_frame(XA, XB, massesA=massesA, massesB=massesB)
 
     # permanent dipole from charges about origin
