@@ -13,3 +13,10 @@ venv/
 # Generated samples/results
 dimer*.xyz
 timer.dat
+LabFix_*.xyz
+LabFix_*.out
+LabFix_*.log
+BodyFix_*.xyz
+BodyFix_*.out
+BodyFix_*.log
+.DS_Store
