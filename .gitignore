@@ -20,3 +20,6 @@ BodyFix_*.xyz
 BodyFix_*.out
 BodyFix_*.log
 .DS_Store
+# ML outputs
+ml_dimer_data.csv
+results.csv
