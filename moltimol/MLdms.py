@@ -17,31 +17,24 @@ from prop_sapt import Dimer, calc_property
 BOHR_TO_ANGSTROM = 0.52917721092
 
 
-def sample_R_75_25(n, rmin, rmid, rmax, k_short=2.5, k_long=2.0):
+def sample_R_beta_mode(n, rmin, rmax, mode_frac=1 / 3, concentration=10.0):
     """
-    Sample R in [rmin, rmax] with a 75/25 split at rmid:
-      P(R <= rmid) = 0.75,  P(R > rmid) = 0.25.
-
-    k_short > 1 biases samples toward rmin within [rmin, rmid]
-    k_long  > 1 biases samples toward rmid within [rmid, rmax]
-    (set k_short=k_long=1.0 for uniform within each segment)
+    Sample R in [rmin,rmax] using a Beta distribution whose mode is at mode_frac
+    (fraction of the interval from rmin).
     """
-    if not (rmin < rmid < rmax):
-        raise ValueError("Require rmin < rmid < rmax")
+    if not (rmin < rmax):
+        raise ValueError("Require rmin < rmax")
+    if not (0.0 < mode_frac < 1.0):
+        raise ValueError("Require 0 < mode_frac < 1")
+    if concentration <= 2.0:
+        raise ValueError("Require concentration > 2 to have an interior mode (a,b>1).")
 
-    u = np.random.rand(n)
-    R = np.empty(n)
+    c = concentration - 2.0
+    a = 1.0 + mode_frac * c
+    b = 1.0 + (1.0 - mode_frac) * c
 
-    short = u < 0.75
-    n_short = short.sum()
-    n_long = n - n_short
-
-    u1 = np.random.rand(n_short)
-    R[short] = rmin + (rmid - rmin) * (u1 ** k_short)
-
-    u2 = np.random.rand(n_long)
-    R[~short] = rmid + (rmax - rmid) * (u2 ** k_long)
-
+    x = np.random.beta(a, b, size=n)
+    R = rmin + (rmax - rmin) * x
     return R
 
 
@@ -117,10 +110,9 @@ def generate_psi4geom_files(
     fileA="CO.xyz",
     fileB="CO.xyz",
     r_min=3.0,
-    r_mid=5.0,
     r_max=10.0,
-    k_short=2.5,
-    k_long=2.0,
+    mode_frac=1 / 3,
+    concentration=10.0,
     sigma_noise=0.1,
     seed=None,
     out_dir="psi4_geoms",
@@ -146,7 +138,9 @@ def generate_psi4geom_files(
     stemA = Path(fileA).stem
     stemB = Path(fileB).stem
 
-    Rs = sample_R_75_25(n_samples, r_min, r_mid, r_max, k_short=k_short, k_long=k_long)
+    Rs = sample_R_beta_mode(
+        n_samples, r_min, r_max, mode_frac=mode_frac, concentration=concentration
+    )
     for i, R in enumerate(Rs):
         u = np.random.uniform(0, 1)
         theta = np.arccos(1 - 2 * u)
@@ -304,10 +298,9 @@ def sample_co_dimer_geometries(
     fileA="CO.xyz",
     fileB="CO.xyz",
     r_min=3.0,
-    r_mid=5.0,
     r_max=8.0,
-    k_short=2.5,
-    k_long=2.0,
+    mode_frac=1 / 3,
+    concentration=10.0,
     sigma_noise=0.1,
     seed=None,
     write_xyz=False,
@@ -340,7 +333,9 @@ def sample_co_dimer_geometries(
 
     data = []
     csv_rows = []
-    Rs = sample_R_75_25(n_samples, r_min, r_mid, r_max, k_short=k_short, k_long=k_long)
+    Rs = sample_R_beta_mode(
+        n_samples, r_min, r_max, mode_frac=mode_frac, concentration=concentration
+    )
     for i, R in enumerate(Rs):
         u = np.random.uniform(0, 1)
         theta = np.arccos(1 - 2 * u)
@@ -477,10 +472,9 @@ if __name__ == "__main__":
     gen_parser.add_argument("--fileA", default="CO.xyz")
     gen_parser.add_argument("--fileB", default="CO.xyz")
     gen_parser.add_argument("--r-min", type=float, default=3.0)
-    gen_parser.add_argument("--r-mid", type=float, default=5.0)
     gen_parser.add_argument("--r-max", type=float, default=8.0)
-    gen_parser.add_argument("--k-short", type=float, default=2.5)
-    gen_parser.add_argument("--k-long", type=float, default=2.0)
+    gen_parser.add_argument("--mode-frac", type=float, default=1 / 3)
+    gen_parser.add_argument("--concentration", type=float, default=10.0)
     gen_parser.add_argument("--sigma-noise", type=float, default=0.1)
     gen_parser.add_argument("--seed", type=int, default=None)
     gen_parser.add_argument("--out-dir", default="psi4_geoms")
@@ -503,10 +497,9 @@ if __name__ == "__main__":
     sample_parser.add_argument("--fileA", default="CO.xyz")
     sample_parser.add_argument("--fileB", default="CO.xyz")
     sample_parser.add_argument("--r-min", type=float, default=3.0)
-    sample_parser.add_argument("--r-mid", type=float, default=5.0)
     sample_parser.add_argument("--r-max", type=float, default=8.0)
-    sample_parser.add_argument("--k-short", type=float, default=2.5)
-    sample_parser.add_argument("--k-long", type=float, default=2.0)
+    sample_parser.add_argument("--mode-frac", type=float, default=1 / 3)
+    sample_parser.add_argument("--concentration", type=float, default=10.0)
     sample_parser.add_argument("--sigma-noise", type=float, default=0.1)
     sample_parser.add_argument("--seed", type=int, default=None)
     sample_parser.add_argument("--out-csv", default="ml_dimer_data.csv")
@@ -521,10 +514,9 @@ if __name__ == "__main__":
             fileA=args.fileA,
             fileB=args.fileB,
             r_min=args.r_min,
-            r_mid=args.r_mid,
             r_max=args.r_max,
-            k_short=args.k_short,
-            k_long=args.k_long,
+            mode_frac=args.mode_frac,
+            concentration=args.concentration,
             sigma_noise=args.sigma_noise,
             seed=args.seed,
             out_dir=args.out_dir,
@@ -549,10 +541,9 @@ if __name__ == "__main__":
             fileA=args.fileA,
             fileB=args.fileB,
             r_min=args.r_min,
-            r_mid=args.r_mid,
             r_max=args.r_max,
-            k_short=args.k_short,
-            k_long=args.k_long,
+            mode_frac=args.mode_frac,
+            concentration=args.concentration,
             sigma_noise=args.sigma_noise,
             seed=args.seed,
             out_csv=args.out_csv,
