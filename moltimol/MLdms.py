@@ -127,6 +127,8 @@ def generate_psi4geom_files(
     psi4_units="angstrom",
     charge_mult_A="0 1",
     charge_mult_B="0 1",
+    body_frame=False,
+    hist_png="R_hist.png",
 ):
     """
     Generate SAPT-style Psi4 geometry files for a dimer.
@@ -167,6 +169,16 @@ def generate_psi4geom_files(
             sigma_noise=sigma_noise,
         )
 
+        if body_frame:
+            massesA = np.array([molmol.mass_of(s) for s in symA])
+            massesB = np.array([molmol.mass_of(s) for s in symB])
+            XA = coords[:n_atoms_A]
+            XB = coords[n_atoms_A:]
+            origin, _, _, _, B = molmol.build_dimer_frame_principal(
+                XA, XB, massesA=massesA, massesB=massesB
+            )
+            coords = (coords - origin) @ B
+
         filename = f"{stemA}_{stemB}_{i:06d}.psi4geom"
         _write_psi4geom(
             out_path / filename,
@@ -178,6 +190,18 @@ def generate_psi4geom_files(
             charge_mult_A=charge_mult_A,
             charge_mult_B=charge_mult_B,
         )
+
+    if hist_png:
+        import matplotlib.pyplot as plt
+
+        plt.figure(figsize=(6, 4))
+        plt.hist(Rs, bins=50, color="#2F6B4F", edgecolor="white")
+        plt.xlabel("R (Angstrom)")
+        plt.ylabel("Count")
+        plt.title("Sampled R Distribution")
+        plt.tight_layout()
+        plt.savefig(hist_png, dpi=150)
+        plt.close()
 
 
 def run_propsapt_batch(
@@ -463,6 +487,8 @@ if __name__ == "__main__":
     gen_parser.add_argument("--psi4-units", default="bohr")
     gen_parser.add_argument("--charge-mult-A", default="0 1")
     gen_parser.add_argument("--charge-mult-B", default="0 1")
+    gen_parser.add_argument("--body-frame", action="store_true")
+    gen_parser.add_argument("--hist-png", default="R_hist.png")
 
     batch_parser = subparsers.add_parser("batch", help="Run propSAPT for one batch.")
     batch_parser.add_argument("--geom-dir", default="psi4_geoms")
@@ -505,6 +531,8 @@ if __name__ == "__main__":
             psi4_units=args.psi4_units,
             charge_mult_A=args.charge_mult_A,
             charge_mult_B=args.charge_mult_B,
+            body_frame=args.body_frame,
+            hist_png=args.hist_png,
         )
     elif args.command == "batch":
         run_propsapt_batch(
