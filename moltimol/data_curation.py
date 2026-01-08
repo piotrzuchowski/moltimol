@@ -108,6 +108,29 @@ def nearest_neighbor_distances(symA, symB, coordsA, coordsB):
     }
 
 
+def intra_distance_stats(symA, symB, coordsA, coordsB):
+    """
+    Compute mean/median of intra-monomer distances for A and B.
+    """
+    d = nearest_neighbor_distances(symA, symB, coordsA, coordsB)
+    A_only = d["A_only"]
+    B_only = d["B_only"]
+
+    def stats(arr):
+        if arr.size == 0:
+            return {"mean": np.nan, "median": np.nan, "sigma": np.nan}
+        return {
+            "mean": float(np.mean(arr)),
+            "median": float(np.median(arr)),
+            "sigma": float(np.std(arr)),
+        }
+
+    return {
+        "A_only": stats(A_only),
+        "B_only": stats(B_only),
+    }
+
+
 def cross_dist_feature(
     XA,
     XB,
@@ -245,9 +268,29 @@ def reduce_psi4geom_dataset(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Collisions
-    collisions = find_collisions_in_psi4_geoms(geom_dir, dmin=dmin, report=False)
-    collision_files = {Path(item["file"]).name for item in collisions}
+    # Collisions + intra stats
+    collisions = []
+    collision_files = set()
+    for path in sorted(geom_dir.glob("*.psi4geom")):
+        symA, symB, XA, XB, _ = parse_psi4geom_string(path.read_text())
+        stats = intra_distance_stats(symA, symB, XA, XB)
+        diff = XA[:, None, :] - XB[None, :, :]
+        d = np.linalg.norm(diff, axis=2)
+        dmin_ab = float(np.min(d)) if d.size else np.nan
+        if dmin_ab < dmin:
+            collisions.append(
+                {
+                    "file": str(path),
+                    "dmin_ab": dmin_ab,
+                    "A_only_mean": stats["A_only"]["mean"],
+                    "A_only_median": stats["A_only"]["median"],
+                    "A_only_sigma": stats["A_only"]["sigma"],
+                    "B_only_mean": stats["B_only"]["mean"],
+                    "B_only_median": stats["B_only"]["median"],
+                    "B_only_sigma": stats["B_only"]["sigma"],
+                }
+            )
+            collision_files.add(path.name)
 
     # Near-duplicates
     dup = find_duplicates_in_psi4_geoms(geom_dir, q=q, round_decimals=round_decimals)
@@ -269,5 +312,17 @@ def reduce_psi4geom_dataset(
 
     print(f"Source geometries: {len(list(geom_dir.glob('*.psi4geom')))}")
     print(f"Collisions removed: {len(collision_files)} (dmin={dmin:.3f})")
+    if collisions:
+        print("Collision intra-distance stats (first 5):")
+        for item in collisions[:5]:
+            print(
+                f"- {item['file']}: "
+                f"A_mean={item['A_only_mean']:.3f} "
+                f"A_med={item['A_only_median']:.3f} "
+                f"A_sig={item['A_only_sigma']:.3f} "
+                f"B_mean={item['B_only_mean']:.3f} "
+                f"B_med={item['B_only_median']:.3f} "
+                f"B_sig={item['B_only_sigma']:.3f}"
+            )
     print(f"Duplicates removed: {len(dup_remove)} (q={q:.3f})")
     print(f"Kept geometries: {kept}")

@@ -222,6 +222,9 @@ def add_cartesian_noise(symbols, coords, sigma=0.1):
     sigma  : noise amplitude (angstrom)
     """
     noise = np.random.normal(scale=sigma, size=coords.shape)
+    for i, sym in enumerate(symbols):
+        if sym == "H":
+            noise[i] *= 2.0
     noisy = coords + noise
     return center_of_mass(symbols, noisy)
 
