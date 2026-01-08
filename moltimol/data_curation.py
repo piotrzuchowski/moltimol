@@ -192,3 +192,38 @@ def find_duplicates_in_psi4_geoms(geom_dir, q=0.01, round_decimals=None):
     """
     features, files = load_psi4geom_features(geom_dir, round_decimals=round_decimals)
     return find_duplicate_pairs_nn(features, files, q=q)
+
+
+def find_collisions_in_psi4_geoms(geom_dir, dmin=1.5, report=True):
+    """
+    Find geometries where any inter-monomer (A-B) distance is below dmin (angstrom).
+    """
+    geom_dir = Path(geom_dir)
+    files = sorted(geom_dir.glob("*.psi4geom"))
+    if not files:
+        raise ValueError("No .psi4geom files found.")
+
+    collisions = []
+    for path in files:
+        symA, symB, XA, XB, _ = parse_psi4geom_string(path.read_text())
+        if len(XA) == 0 or len(XB) == 0:
+            continue
+        diff = XA[:, None, :] - XB[None, :, :]
+        d = np.linalg.norm(diff, axis=2)
+        dmin_ab = float(np.min(d))
+        if dmin_ab < dmin:
+            collisions.append(
+                {
+                    "file": str(path),
+                    "dmin_ab": dmin_ab,
+                }
+            )
+    if report:
+        print(f"Checked {len(files)} geometries in {geom_dir}")
+        print(f"Collision threshold dmin = {dmin:.3f} angstrom")
+        print(f"Collisions found: {len(collisions)}")
+        for item in collisions[:10]:
+            print(f"- {item['file']} (dmin_ab={item['dmin_ab']:.3f})")
+        if len(collisions) > 10:
+            print(f"... {len(collisions) - 10} more")
+    return collisions
