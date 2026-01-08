@@ -1,4 +1,5 @@
 from pathlib import Path
+import shutil
 
 import numpy as np
 import psi4
@@ -227,3 +228,46 @@ def find_collisions_in_psi4_geoms(geom_dir, dmin=1.5, report=True):
         if len(collisions) > 10:
             print(f"... {len(collisions) - 10} more")
     return collisions
+
+
+def reduce_psi4geom_dataset(
+    geom_dir,
+    out_dir,
+    dmin=1.5,
+    q=0.01,
+    round_decimals=None,
+):
+    """
+    Reduce a dataset by removing collisions and near-duplicate geometries.
+    Writes remaining .psi4geom files to out_dir.
+    """
+    geom_dir = Path(geom_dir)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Collisions
+    collisions = find_collisions_in_psi4_geoms(geom_dir, dmin=dmin, report=False)
+    collision_files = {Path(item["file"]).name for item in collisions}
+
+    # Near-duplicates
+    dup = find_duplicates_in_psi4_geoms(geom_dir, q=q, round_decimals=round_decimals)
+    dup_pairs = dup["pairs"]
+    dup_remove = set()
+    for a, b, _ in dup_pairs:
+        dup_remove.add(Path(b).name)
+
+    # Copy retained files
+    kept = 0
+    for path in sorted(geom_dir.glob("*.psi4geom")):
+        name = path.name
+        if name in collision_files:
+            continue
+        if name in dup_remove:
+            continue
+        shutil.copy2(path, out_dir / name)
+        kept += 1
+
+    print(f"Source geometries: {len(list(geom_dir.glob('*.psi4geom')))}")
+    print(f"Collisions removed: {len(collision_files)} (dmin={dmin:.3f})")
+    print(f"Duplicates removed: {len(dup_remove)} (q={q:.3f})")
+    print(f"Kept geometries: {kept}")
