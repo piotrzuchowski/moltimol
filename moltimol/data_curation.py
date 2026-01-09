@@ -5,6 +5,8 @@ import numpy as np
 import psi4
 from scipy.spatial import cKDTree
 
+from moltimol import center_of_mass_mass, mass_of
+
 from prop_sapt import Dimer
 
 BOHR_TO_ANGSTROM = 0.52917721092
