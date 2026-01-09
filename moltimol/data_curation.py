@@ -224,12 +224,34 @@ def find_duplicate_pairs_nn(features, files, q=0.01, hist_png=None):
     return {"tau": tau, "pairs": pairs, "nn_dist": d_nn, "nn_idx": idx_nn}
 
 
-def find_duplicates_in_psi4_geoms(geom_dir, q=0.01, round_decimals=None):
+def find_duplicates_in_psi4_geoms(geom_dir, q=0.01, round_decimals=None, hist_png=None, hist2d_png=None):
     """
     Convenience wrapper to find duplicates in a folder of .psi4geom files.
     """
     features, files = load_psi4geom_features(geom_dir, round_decimals=round_decimals)
-    return find_duplicate_pairs_nn(features, files, q=q)
+    result = find_duplicate_pairs_nn(features, files, q=q, hist_png=hist_png)
+    if hist2d_png:
+        R_vals = []
+        for fpath in files:
+            symA, symB, XA, XB, _ = parse_psi4geom_string(Path(fpath).read_text())
+            massesA = np.array([mass_of(s) for s in symA])
+            massesB = np.array([mass_of(s) for s in symB])
+            RA = center_of_mass_mass(XA, massesA)
+            RB = center_of_mass_mass(XB, massesB)
+            R_vals.append(float(np.linalg.norm(RB - RA)))
+        R_vals = np.asarray(R_vals, float)
+        d_nn = result["nn_dist"]
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(6, 4))
+        plt.hist2d(R_vals, d_nn, bins=50, cmap="viridis")
+        plt.xlabel("R (Angstrom)")
+        plt.ylabel("NN distance")
+        plt.title("NN distance vs R")
+        plt.colorbar(label="Count")
+        plt.tight_layout()
+        plt.savefig(hist2d_png, dpi=150)
+        plt.close()
+    return result
 
 
 def find_collisions_in_psi4_geoms(geom_dir, dmin=1.5, report=True):
