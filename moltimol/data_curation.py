@@ -227,6 +227,7 @@ def reduce_psi4geom_dataset(
     dmin=1.5,
     q=0.01,
     round_decimals=None,
+    list_txt=None,
 ):
     """
     Reduce a dataset by removing collisions and near-duplicate geometries.
@@ -269,6 +270,7 @@ def reduce_psi4geom_dataset(
 
     # Copy retained files
     kept = 0
+    kept_list = []
     for path in sorted(geom_dir.glob("*.psi4geom")):
         name = path.name
         if name in collision_files:
@@ -277,6 +279,12 @@ def reduce_psi4geom_dataset(
             continue
         shutil.copy2(path, out_dir / name)
         kept += 1
+        geom_id = ""
+        try:
+            geom_id = str(int(path.stem.split("_")[-1]))
+        except Exception:
+            geom_id = ""
+        kept_list.append((name, geom_id))
 
     print(f"Source geometries: {len(list(geom_dir.glob('*.psi4geom')))}")
     print(f"Collisions removed: {len(collision_files)} (dmin={dmin:.3f})")
@@ -294,9 +302,14 @@ def reduce_psi4geom_dataset(
             )
     print(f"Duplicates removed: {len(dup_remove)} (q={q:.3f})")
     print(f"Kept geometries: {kept}")
+    if list_txt:
+        with open(list_txt, "w") as f:
+            f.write("filename\tgeom_id\n")
+            for name, geom_id in kept_list:
+                f.write(f"{name}\t{geom_id}\n")
 
 
-def fps_select_indices(features, k, start_idx=0):
+def fps_select_indices(features, k, start_idx=0, start_mode="index"):
     """
     Farthest point sampling (FPS) on a feature matrix.
 
@@ -307,7 +320,9 @@ def fps_select_indices(features, k, start_idx=0):
     k : int
         Number of samples to select.
     start_idx : int, default 0
-        Index of the initial seed point.
+        Index of the initial seed point (used when start_mode="index").
+    start_mode : {"index","most_isolated"}, default "index"
+        If "most_isolated", starts from the point with the largest NN distance.
 
     Returns
     -------
@@ -318,6 +333,12 @@ def fps_select_indices(features, k, start_idx=0):
     n = F.shape[0]
     if k <= 0 or k > n:
         raise ValueError("k must be in [1, n]")
+    if start_mode == "most_isolated":
+        d_nn, _ = nn_distances_features(F)
+        start_idx = int(np.argmax(d_nn))
+    elif start_mode != "index":
+        raise ValueError("start_mode must be 'index' or 'most_isolated'")
+
     selected = [start_idx]
     dist = np.full(n, np.inf)
     for _ in range(1, k):
@@ -335,6 +356,7 @@ def fps_reduce_psi4geoms(
     k,
     start_idx=0,
     round_decimals=None,
+    list_txt=None,
 ):
     """
     Reduce dataset with FPS using cross-distance features.
@@ -363,11 +385,23 @@ def fps_reduce_psi4geoms(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     selected_files = []
+    kept_list = []
     for i in sel_idx:
         src = Path(files[i])
         dst = out_dir / src.name
         shutil.copy2(src, dst)
         selected_files.append(str(dst))
+        geom_id = ""
+        try:
+            geom_id = str(int(src.stem.split("_")[-1]))
+        except Exception:
+            geom_id = ""
+        kept_list.append((src.name, geom_id))
 
     print(f"FPS selected {len(selected_files)} of {len(files)} geometries.")
+    if list_txt:
+        with open(list_txt, "w") as f:
+            f.write("filename\tgeom_id\n")
+            for name, geom_id in kept_list:
+                f.write(f"{name}\t{geom_id}\n")
     return selected_files
