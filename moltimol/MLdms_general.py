@@ -54,6 +54,29 @@ def setup_psi4_defaults(psi4_options=None):
         psi4.set_options(psi4_options)
 
 
+def compute_sapt0_batch(geom_strings, basis="aug-cc-pvdz", psi4_options=None):
+    """
+    Compute SAPT0 energies for a batch of geometry strings.
+    Returns a list of dicts with energy components per geometry.
+    """
+    setup_psi4_defaults(psi4_options=psi4_options)
+    psi4.set_options({"basis": basis})
+
+    results = []
+    for i, geom in enumerate(geom_strings):
+        dimer = Dimer(geom)
+        sapt0 = dimer.sapt0()
+        row = {"geom_id": i}
+        if hasattr(sapt0, "to_dict"):
+            row.update(sapt0.to_dict())
+        elif isinstance(sapt0, dict):
+            row.update(sapt0)
+        else:
+            row["sapt0_total"] = float(sapt0)
+        results.append(row)
+    return results
+
+
 def parse_psi4geom_string(text):
     """
     Parse a Psi4 geometry block with monomer separator ("--").
@@ -248,6 +271,7 @@ def run_propsapt_batch(
     method_low="propSAPT",
     method_high=None,
     psi4_options=None,
+    compute_sapt0=False,
 ):
     """
     Run propSAPT dipole calculations for one batch of geometry files.
@@ -273,6 +297,15 @@ def run_propsapt_batch(
 
         dimer = Dimer(geom_str)
         dipole_df = calc_property(dimer, "dipole", results=os.devnull)
+        sapt0_row = {}
+        if compute_sapt0:
+            sapt0 = dimer.sapt0()
+            if hasattr(sapt0, "to_dict"):
+                sapt0_row = sapt0.to_dict()
+            elif isinstance(sapt0, dict):
+                sapt0_row = dict(sapt0)
+            else:
+                sapt0_row = {"sapt0_total": float(sapt0)}
 
         massesA = np.array([molmol.mass_of(s) for s in symA])
         massesB = np.array([molmol.mass_of(s) for s in symB])
@@ -314,6 +347,7 @@ def run_propsapt_batch(
                 "R": R_com,
                 **coord_cols,
                 **dipole_body_cols,
+                **sapt0_row,
             }
         )
 
@@ -533,6 +567,7 @@ if __name__ == "__main__":
     batch_parser.add_argument("--out-npz", default=None)
     batch_parser.add_argument("--method-low", default="propSAPT")
     batch_parser.add_argument("--method-high", default=None)
+    batch_parser.add_argument("--sapt0", action="store_true")
 
     sample_parser = subparsers.add_parser("sample", help="Sample + compute propSAPT directly.")
     sample_parser.add_argument("--n-samples", type=int, default=1000)
@@ -578,6 +613,7 @@ if __name__ == "__main__":
             out_npz=args.out_npz,
             method_low=args.method_low,
             method_high=args.method_high,
+            compute_sapt0=args.sapt0,
         )
     elif args.command == "sample":
         samples, dipoles = sample_dimer_geometries(

@@ -2,7 +2,6 @@ from pathlib import Path
 import shutil
 
 import numpy as np
-import psi4
 from scipy.spatial import cKDTree
 
 from moltimol import center_of_mass_mass, mass_of
@@ -53,30 +52,6 @@ def parse_psi4geom_string(text):
         coordsA *= BOHR_TO_ANGSTROM
         coordsB *= BOHR_TO_ANGSTROM
     return symA, symB, coordsA, coordsB, units
-
-
-def compute_sapt0_batch(geom_strings, basis="aug-cc-pvdz", psi4_options=None):
-    """
-    Compute SAPT0 energies for a batch of geometry strings.
-    Returns a list of dicts with energy components per geometry.
-    """
-    psi4.set_options({"basis": basis})
-    if psi4_options:
-        psi4.set_options(psi4_options)
-
-    results = []
-    for i, geom in enumerate(geom_strings):
-        dimer = Dimer(geom)
-        sapt0 = dimer.sapt0()
-        row = {"geom_id": i}
-        if hasattr(sapt0, "to_dict"):
-            row.update(sapt0.to_dict())
-        elif isinstance(sapt0, dict):
-            row.update(sapt0)
-        else:
-            row["sapt0_total"] = float(sapt0)
-        results.append(row)
-    return results
 
 
 def nearest_neighbor_distances(symA, symB, coordsA, coordsB):
@@ -364,3 +339,80 @@ def reduce_psi4geom_dataset(
             )
     print(f"Duplicates removed: {len(dup_remove)} (q={q:.3f})")
     print(f"Kept geometries: {kept}")
+
+
+def fps_select_indices(features, k, start_idx=0):
+    """
+    Farthest point sampling (FPS) on a feature matrix.
+
+    Parameters
+    ----------
+    features : array-like, shape (n_samples, n_features)
+        Feature vectors (e.g., cross-distance features).
+    k : int
+        Number of samples to select.
+    start_idx : int, default 0
+        Index of the initial seed point.
+
+    Returns
+    -------
+    list[int]
+        Indices of selected samples in selection order.
+    """
+    F = np.asarray(features, float)
+    n = F.shape[0]
+    if k <= 0 or k > n:
+        raise ValueError("k must be in [1, n]")
+    selected = [start_idx]
+    dist = np.full(n, np.inf)
+    for _ in range(1, k):
+        last = F[selected[-1]]
+        d = np.linalg.norm(F - last, axis=1)
+        dist = np.minimum(dist, d)
+        next_idx = int(np.argmax(dist))
+        selected.append(next_idx)
+    return selected
+
+
+def fps_reduce_psi4geoms(
+    geom_dir,
+    out_dir,
+    k,
+    start_idx=0,
+    round_decimals=None,
+):
+    """
+    Reduce dataset with FPS using cross-distance features.
+
+    Parameters
+    ----------
+    geom_dir : str or Path
+        Directory with .psi4geom files.
+    out_dir : str or Path
+        Output directory for selected files.
+    k : int
+        Number of geometries to keep.
+    start_idx : int, default 0
+        Initial seed index in the sorted file list.
+    round_decimals : int or None
+        If set, rounds distances before feature construction.
+
+    Returns
+    -------
+    list[str]
+        Paths of selected files written to out_dir.
+    """
+    features, files = load_psi4geom_features(geom_dir, round_decimals=round_decimals)
+    sel_idx = fps_select_indices(features, k, start_idx=start_idx)
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    selected_files = []
+    for i in sel_idx:
+        src = Path(files[i])
+        dst = out_dir / src.name
+        shutil.copy2(src, dst)
+        selected_files.append(str(dst))
+
+    print(f"FPS selected {len(selected_files)} of {len(files)} geometries.")
+    return selected_files
