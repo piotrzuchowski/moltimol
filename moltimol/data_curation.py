@@ -197,12 +197,26 @@ def load_psi4geom_features(geom_dir, round_decimals=None):
     return np.asarray(features, float), [str(p) for p in files]
 
 
-def find_duplicate_pairs_nn(features, files, q=0.01):
+def find_duplicate_pairs_nn(features, files, q=0.01, hist_png=None):
     """
     Find near-duplicate geometries using NN distances and a quantile threshold.
     """
     d_nn, idx_nn = nn_distances_features(features)
     tau = float(np.quantile(d_nn, q))
+    print(f"NN distances count: {len(d_nn)}")
+    print(f"NN distances mean: {float(np.mean(d_nn)):.6f}")
+    print(f"NN distances max: {float(np.max(d_nn)):.6f}")
+    if hist_png:
+        import matplotlib.pyplot as plt
+
+        plt.figure(figsize=(6, 4))
+        plt.hist(d_nn, bins=50, color="#345995", edgecolor="white")
+        plt.xlabel("NN distance")
+        plt.ylabel("Count")
+        plt.title("Nearest-neighbor distances")
+        plt.tight_layout()
+        plt.savefig(hist_png, dpi=150)
+        plt.close()
     pairs = []
     for i, (d, j) in enumerate(zip(d_nn, idx_nn)):
         if d <= tau:
