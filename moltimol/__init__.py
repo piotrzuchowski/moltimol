@@ -2,7 +2,7 @@
 Lightweight helpers for generating and transforming molecular dimers.
 
 Conventions:
-- Coordinates are in angstrom unless otherwise noted.
+- Coordinates are in angstrom.
 - Frame builders return (origin, ex, ey, ez, B) with B columns [ex, ey, ez].
   Transform coords: X_body = (X - origin) @ B
   Transform vectors: v_body = B.T @ v_lab
@@ -74,6 +74,48 @@ def read_xyz(filename):
         coords.append([x, y, z])
 
     return np.array(symbols), np.array(coords)
+
+
+def parse_psi4geom_string(text):
+    """
+    Parse a Psi4 geometry block with monomer separator ("--").
+    Returns (symA, symB, coords_A, coords_B, units).
+    """
+    units = "angstrom"
+    symA, symB = [], []
+    coordsA, coordsB = [], []
+    section = 0
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        lower = line.lower()
+        if lower.startswith("units"):
+            units = lower.split()[1]
+            continue
+        if lower.startswith("symmetry") or lower.startswith("no_com") or lower.startswith("no_reorient"):
+            continue
+        if line.startswith("--"):
+            section = 1
+            continue
+        parts = line.split()
+        if len(parts) == 2 and all(p.replace("+", "").replace("-", "").isdigit() for p in parts):
+            continue
+        if len(parts) >= 4:
+            sym = parts[0]
+            x, y, z = map(float, parts[1:4])
+            if section == 0:
+                symA.append(sym)
+                coordsA.append([x, y, z])
+            else:
+                symB.append(sym)
+                coordsB.append([x, y, z])
+
+    coordsA = np.array(coordsA, float)
+    coordsB = np.array(coordsB, float)
+    if units != "angstrom":
+        raise ValueError("Only angstrom units are supported.")
+    return symA, symB, coordsA, coordsB, units
 
 
 def rotation_matrix_from_euler(alpha, beta, gamma):

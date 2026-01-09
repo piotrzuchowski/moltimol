@@ -14,9 +14,6 @@ if __package__ is None or __package__ == "":
 import moltimol as molmol
 from prop_sapt import Dimer, calc_property
 
-BOHR_TO_ANGSTROM = 0.52917721092
-
-
 def sample_R_beta_mode(n, rmin, rmax, mode_frac=1 / 3, concentration=10.0):
     """
     Sample R in [rmin,rmax] using a Beta distribution whose mode is at mode_frac
@@ -60,13 +57,13 @@ def _write_psi4geom(
     symB,
     coords,
     n_atoms_A,
-    psi4_units="bohr",
+    psi4_units="angstrom",
     charge_mult_A="0 1",
     charge_mult_B="0 1",
 ):
     coords_out = np.asarray(coords, float)
-    if psi4_units == "bohr":
-        coords_out = coords_out / BOHR_TO_ANGSTROM
+    if psi4_units != "angstrom":
+        raise ValueError("Only angstrom units are supported.")
 
     with open(path, "w") as f:
         f.write("symmetry c1\n")
@@ -305,7 +302,7 @@ def sample_co_dimer_geometries(
     seed=None,
     write_xyz=False,
     write_psi4_dat=False,
-    psi4_units="bohr",
+    psi4_units="angstrom",
     charge_mult_A="0 1",
     charge_mult_B="0 1",
     out_prefix="dimer_sample",
@@ -478,7 +475,7 @@ if __name__ == "__main__":
     gen_parser.add_argument("--sigma-noise", type=float, default=0.1)
     gen_parser.add_argument("--seed", type=int, default=None)
     gen_parser.add_argument("--out-dir", default="psi4_geoms")
-    gen_parser.add_argument("--psi4-units", default="bohr")
+    gen_parser.add_argument("--psi4-units", default="angstrom")
     gen_parser.add_argument("--charge-mult-A", default="0 1")
     gen_parser.add_argument("--charge-mult-B", default="0 1")
     gen_parser.add_argument("--body-frame", action="store_true")

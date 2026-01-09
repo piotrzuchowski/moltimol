@@ -14,6 +14,10 @@ Optional:
 - ase (for full periodic table support for atomic masses)
 - pytest (to run tests)
 
+## Units
+
+All geometry inputs/outputs in this repo are assumed to be in angstrom.
+
 ## Files
 
 - `moltimol_helper.py` — helper functions

@@ -4,54 +4,9 @@ import shutil
 import numpy as np
 from scipy.spatial import cKDTree
 
-from moltimol import center_of_mass_mass, mass_of
+from moltimol import center_of_mass_mass, mass_of, parse_psi4geom_string
 
 from prop_sapt import Dimer
-
-BOHR_TO_ANGSTROM = 0.52917721092
-
-
-def parse_psi4geom_string(text):
-    """
-    Parse a Psi4 geometry block with monomer separator ("--").
-    Returns (symA, symB, coords_A, coords_B, units).
-    """
-    units = "angstrom"
-    symA, symB = [], []
-    coordsA, coordsB = [], []
-    section = 0
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        lower = line.lower()
-        if lower.startswith("units"):
-            units = lower.split()[1]
-            continue
-        if lower.startswith("symmetry") or lower.startswith("no_com") or lower.startswith("no_reorient"):
-            continue
-        if line.startswith("--"):
-            section = 1
-            continue
-        parts = line.split()
-        if len(parts) == 2 and all(p.replace("+", "").replace("-", "").isdigit() for p in parts):
-            continue
-        if len(parts) >= 4:
-            sym = parts[0]
-            x, y, z = map(float, parts[1:4])
-            if section == 0:
-                symA.append(sym)
-                coordsA.append([x, y, z])
-            else:
-                symB.append(sym)
-                coordsB.append([x, y, z])
-
-    coordsA = np.array(coordsA, float)
-    coordsB = np.array(coordsB, float)
-    if units == "bohr":
-        coordsA *= BOHR_TO_ANGSTROM
-        coordsB *= BOHR_TO_ANGSTROM
-    return symA, symB, coordsA, coordsB, units
 
 
 def nearest_neighbor_distances(symA, symB, coordsA, coordsB):
