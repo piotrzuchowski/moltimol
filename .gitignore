@@ -20,6 +20,16 @@ BodyFix_*.xyz
 BodyFix_*.out
 BodyFix_*.log
 .DS_Store
+
+# Plots
+R_hist.png
+nn_hist.png
+nn_vs_R.png
+nndist.png
+moltimol/R_hist.png
+moltimol/nn_hist.png
+moltimol/nn_vs_R.png
+moltimol/nndist.png
 # ML outputs
 ml_dimer_data.csv
 results.csv
