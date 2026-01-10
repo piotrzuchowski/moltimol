@@ -347,6 +347,7 @@ def sample_dimer_geometries(
     out_npz=None,
     method_low="propSAPT",
     method_high=None,
+    compute_sapt0=False,
 ):
     """
     Sample dimer geometries and return a list of dicts.
@@ -402,6 +403,15 @@ def sample_dimer_geometries(
 
         dimer = Dimer(mol_string)
         dipole_df = calc_property(dimer, "dipole", results=os.devnull)
+        sapt0_row = {}
+        if compute_sapt0:
+            sapt0 = dimer.sapt0()
+            if hasattr(sapt0, "to_dict"):
+                sapt0_row = sapt0.to_dict()
+            elif isinstance(sapt0, dict):
+                sapt0_row = dict(sapt0)
+            else:
+                sapt0_row = {"sapt0_total": float(sapt0)}
 
         massesA = np.array([molmol.mass_of(s) for s in symA])
         massesB = np.array([molmol.mass_of(s) for s in symB])
@@ -445,6 +455,7 @@ def sample_dimer_geometries(
                 "R": R_com,
                 **coord_cols,
                 **dipole_body_cols,
+                **sapt0_row,
             }
         )
 
@@ -537,6 +548,7 @@ def main():
     sample_parser.add_argument("--out-npz", default=None)
     sample_parser.add_argument("--method-low", default="propSAPT")
     sample_parser.add_argument("--method-high", default=None)
+    sample_parser.add_argument("--sapt0", action="store_true")
 
     args = parser.parse_args()
 
@@ -584,6 +596,7 @@ def main():
             out_npz=args.out_npz,
             method_low=args.method_low,
             method_high=args.method_high,
+            compute_sapt0=args.sapt0,
         )
         print(f"Generated {len(samples)} samples.")
         print(dipoles.head())
