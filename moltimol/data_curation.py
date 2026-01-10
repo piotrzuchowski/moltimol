@@ -313,6 +313,8 @@ def reduce_psi4geom_pool(*args, **kwargs):
     """
     Backward-compatible alias for reduce_psi4geom_dataset.
     """
+    if "kept_list_path" in kwargs and "list_txt" not in kwargs:
+        kwargs["list_txt"] = kwargs.pop("kept_list_path")
     return reduce_psi4geom_dataset(*args, **kwargs)
 
 
