@@ -309,6 +309,13 @@ def reduce_psi4geom_dataset(
                 f.write(f"{name}\t{geom_id}\n")
 
 
+def reduce_psi4geom_pool(*args, **kwargs):
+    """
+    Backward-compatible alias for reduce_psi4geom_dataset.
+    """
+    return reduce_psi4geom_dataset(*args, **kwargs)
+
+
 def fps_select_indices(features, k, start_idx=0, start_mode="index"):
     """
     Farthest point sampling (FPS) on a feature matrix.
