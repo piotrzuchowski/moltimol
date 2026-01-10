@@ -74,48 +74,6 @@ def compute_sapt0_batch(geom_strings, basis="aug-cc-pvdz", psi4_options=None):
     return results
 
 
-def parse_psi4geom_string(text):
-    """
-    Parse a Psi4 geometry block with monomer separator ("--").
-    Returns (symA, symB, coords_A, coords_B, units).
-    """
-    units = "angstrom"
-    symA, symB = [], []
-    coordsA, coordsB = [], []
-    section = 0
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        lower = line.lower()
-        if lower.startswith("units"):
-            units = lower.split()[1]
-            continue
-        if lower.startswith("symmetry") or lower.startswith("no_com") or lower.startswith("no_reorient"):
-            continue
-        if line.startswith("--"):
-            section = 1
-            continue
-        parts = line.split()
-        if len(parts) == 2 and all(p.replace("+", "").replace("-", "").isdigit() for p in parts):
-            continue
-        if len(parts) >= 4:
-            sym = parts[0]
-            x, y, z = map(float, parts[1:4])
-            if section == 0:
-                symA.append(sym)
-                coordsA.append([x, y, z])
-            else:
-                symB.append(sym)
-                coordsB.append([x, y, z])
-
-    coordsA = np.array(coordsA, float)
-    coordsB = np.array(coordsB, float)
-    if units != "angstrom":
-        raise ValueError("Only angstrom units are supported.")
-    return symA, symB, coordsA, coordsB, units
-
-
 def _write_psi4geom(
     path,
     symA,
@@ -287,7 +245,7 @@ def run_propsapt_batch(
     for path in batch_files:
         geom_id = int(path.stem.split("_")[-1])
         geom_str = path.read_text()
-        symA, symB, XA, XB, _ = parse_psi4geom_string(geom_str)
+        symA, symB, XA, XB, _ = molmol.parse_psi4geom_string(geom_str)
         coords = np.vstack([XA, XB])
         n_atoms_A = len(symA)
 
@@ -534,7 +492,7 @@ def sample_dimer_geometries(
     return data, csv_df
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="ML dimer sampling utilities (general).")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -629,3 +587,7 @@ if __name__ == "__main__":
         )
         print(f"Generated {len(samples)} samples.")
         print(dipoles.head())
+
+
+if __name__ == "__main__":
+    main()

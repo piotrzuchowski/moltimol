@@ -24,6 +24,8 @@ All geometry inputs/outputs in this repo are assumed to be in angstrom.
 - `moltimol/` — package implementation
 - `sample_molecules.py` — example script generating XYZ geometries
 - `CO.xyz` — example monomer input
+- `moltimol/MLdms_general.py` — main CLI for sampling/propSAPT batches
+- `moltimol/MLdms.py` — backward-compatible wrapper around `moltimol/MLdms_general.py`
 
 ## Tests
 
