@@ -49,11 +49,6 @@ def _psi4_dipole_from_xyz(symbols, coords):
             continue
     for var in ("CURRENT DIPOLE", "DIPOLE", "SCF DIPOLE"):
         try:
-            return np.array(psi4.core.get_variable(var), dtype=float)
-        except Exception:
-            continue
-    for var in ("CURRENT DIPOLE", "DIPOLE", "SCF DIPOLE"):
-        try:
             return np.array(psi4.core.variable(var), dtype=float)
         except Exception:
             continue
