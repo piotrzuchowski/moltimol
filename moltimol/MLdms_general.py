@@ -51,6 +51,45 @@ def setup_psi4_defaults(psi4_options=None):
         psi4.set_options(psi4_options)
 
 
+def _sapt0_from_psi4(geom_str):
+    """
+    Compute SAPT0 via Psi4 and return a dict of component energies.
+    """
+    mol = psi4.geometry(geom_str)
+    energy = psi4.energy("sapt0", molecule=mol)
+    out = {"sapt0_total": float(energy)}
+
+    keys = [
+        ("SAPT0 TOTAL ENERGY", "sapt0_total"),
+        ("SAPT0 ELST ENERGY", "sapt0_elst"),
+        ("SAPT0 EXCH ENERGY", "sapt0_exch"),
+        ("SAPT0 IND ENERGY", "sapt0_ind"),
+        ("SAPT0 DISP ENERGY", "sapt0_disp"),
+        ("SAPT0 EXCH-IND ENERGY", "sapt0_exch_ind"),
+        ("SAPT0 EXCH-DISP ENERGY", "sapt0_exch_disp"),
+        ("SAPT0 DELTA HF", "sapt0_delta_hf"),
+    ]
+    for psi4_key, out_key in keys:
+        try:
+            if psi4.core.has_variable(psi4_key):
+                out[out_key] = float(psi4.core.variable(psi4_key))
+        except Exception:
+            continue
+    return out
+
+
+def _get_sapt0_row(geom_str):
+    dimer = Dimer(geom_str)
+    if hasattr(dimer, "sapt0"):
+        sapt0 = dimer.sapt0()
+        if hasattr(sapt0, "to_dict"):
+            return sapt0.to_dict()
+        if isinstance(sapt0, dict):
+            return dict(sapt0)
+        return {"sapt0_total": float(sapt0)}
+    return _sapt0_from_psi4(geom_str)
+
+
 def compute_sapt0_batch(geom_strings, basis="aug-cc-pvdz", psi4_options=None):
     """
     Compute SAPT0 energies for a batch of geometry strings.
@@ -61,15 +100,8 @@ def compute_sapt0_batch(geom_strings, basis="aug-cc-pvdz", psi4_options=None):
 
     results = []
     for i, geom in enumerate(geom_strings):
-        dimer = Dimer(geom)
-        sapt0 = dimer.sapt0()
         row = {"geom_id": i}
-        if hasattr(sapt0, "to_dict"):
-            row.update(sapt0.to_dict())
-        elif isinstance(sapt0, dict):
-            row.update(sapt0)
-        else:
-            row["sapt0_total"] = float(sapt0)
+        row.update(_get_sapt0_row(geom))
         results.append(row)
     return results
 
@@ -253,13 +285,7 @@ def run_propsapt_batch(
         dipole_df = calc_property(dimer, "dipole", results=os.devnull)
         sapt0_row = {}
         if compute_sapt0:
-            sapt0 = dimer.sapt0()
-            if hasattr(sapt0, "to_dict"):
-                sapt0_row = sapt0.to_dict()
-            elif isinstance(sapt0, dict):
-                sapt0_row = dict(sapt0)
-            else:
-                sapt0_row = {"sapt0_total": float(sapt0)}
+            sapt0_row = _get_sapt0_row(geom_str)
 
         massesA = np.array([molmol.mass_of(s) for s in symA])
         massesB = np.array([molmol.mass_of(s) for s in symB])
@@ -355,14 +381,8 @@ def run_sapt0_batch(
         geom_id = int(path.stem.split("_")[-1])
         geom_str = path.read_text()
         dimer = Dimer(geom_str)
-        sapt0 = dimer.sapt0()
         row = {"geom_id": geom_id}
-        if hasattr(sapt0, "to_dict"):
-            row.update(sapt0.to_dict())
-        elif isinstance(sapt0, dict):
-            row.update(sapt0)
-        else:
-            row["sapt0_total"] = float(sapt0)
+        row.update(_get_sapt0_row(geom_str))
         rows.append(row)
 
     df = pd.DataFrame(rows)
