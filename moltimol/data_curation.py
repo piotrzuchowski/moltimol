@@ -122,6 +122,110 @@ def bond_length_histograms(
     print(f"Wrote histograms to {out_dir}")
 
 
+def com_axis_angle_histograms(
+    geom_dir,
+    out_dir="angle_histograms",
+    bins=60,
+    max_files=None,
+):
+    """
+    Create histograms of cos(theta) between the COMA->COMB axis and monomer vectors.
+
+    For each geometry:
+      - COMA is the center of mass of monomer A.
+      - COMB is the center of mass of monomer B.
+      - axis is COMA -> COMB.
+      - For each atom in A, we compute the angle between axis and COMA->atomA.
+      - For each atom in B, we compute the angle between (-axis) and COMB->atomB,
+        so the reference axis always points "from the other monomer".
+
+    This yields an orientation diversity diagnostic (cos(theta) in [-1, 1])
+    across all geometries in geom_dir.
+
+    Outputs:
+      - A_only_angles.png: angles for monomer A atoms.
+      - B_only_angles.png: angles for monomer B atoms.
+      - AB_combined_angles.png: all A+B angles combined.
+
+    Parameters
+    ----------
+    geom_dir : str or Path
+        Directory with .psi4geom files.
+    out_dir : str or Path, default "angle_histograms"
+        Output directory for PNGs.
+    bins : int, default 60
+        Number of histogram bins.
+    max_files : int or None, default None
+        If set, only the first max_files geometries are processed.
+    """
+    geom_dir = Path(geom_dir)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    files = sorted(geom_dir.glob("*.psi4geom"))
+    if max_files is not None:
+        files = files[: int(max_files)]
+
+    A_cos = []
+    B_cos = []
+    for path in files:
+        symA, symB, XA, XB, _ = parse_psi4geom_string(path.read_text())
+        if XA.size == 0 or XB.size == 0:
+            continue
+        massesA = np.array([mass_of(s) for s in symA], dtype=float)
+        massesB = np.array([mass_of(s) for s in symB], dtype=float)
+        comA = center_of_mass_mass(XA, massesA)
+        comB = center_of_mass_mass(XB, massesB)
+        axis = comB - comA
+        axis_norm = np.linalg.norm(axis)
+        if axis_norm < 1e-12:
+            continue
+        axis_u = axis / axis_norm
+
+        for ra in XA:
+            va = ra - comA
+            na = np.linalg.norm(va)
+            if na < 1e-12:
+                continue
+            cosang = np.clip(np.dot(axis_u, va / na), -1.0, 1.0)
+            A_cos.append(cosang)
+
+        axis_b = -axis_u
+        for rb in XB:
+            vb = rb - comB
+            nb = np.linalg.norm(vb)
+            if nb < 1e-12:
+                continue
+            cosang = np.clip(np.dot(axis_b, vb / nb), -1.0, 1.0)
+            B_cos.append(cosang)
+
+    A_cos = np.array(A_cos, float)
+    B_cos = np.array(B_cos, float)
+
+    import matplotlib.pyplot as plt
+
+    def _plot(data, title, filename):
+        plt.figure(figsize=(6, 4))
+        plt.hist(data, bins=bins, color="#2F6B4F", edgecolor="white")
+        plt.xlabel("cos(theta)")
+        plt.ylabel("Count")
+        plt.title(title)
+        plt.tight_layout()
+        plt.savefig(out_dir / filename, dpi=150)
+        plt.close()
+
+    if A_cos.size:
+        _plot(A_cos, "Monomer A: COMA->COMB vs COMA->atomA", "A_only_angles.png")
+    if B_cos.size:
+        _plot(B_cos, "Monomer B: COMB->COMA vs COMB->atomB", "B_only_angles.png")
+    if A_cos.size or B_cos.size:
+        combined = np.concatenate([A_cos, B_cos]) if B_cos.size else A_cos
+        _plot(combined, "All COM-axis angles", "AB_combined_angles.png")
+
+    print(f"Processed {len(files)} geometries from {geom_dir}")
+    print(f"Wrote histograms to {out_dir}")
+
+
 def cross_dist_feature(
     XA,
     XB,

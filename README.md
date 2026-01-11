@@ -59,3 +59,30 @@ from moltimol.data_curation import find_duplicates_in_psi4_geoms, find_collision
 find_duplicates_in_psi4_geoms("psi4_geoms", q=0.01, hist_png="nn_hist.png", hist2d_png="nn_vs_R.png")
 find_collisions_in_psi4_geoms("psi4_geoms", dmin=1.5)
 ```
+
+Pruning (collisions + near-duplicates):
+
+```python
+from moltimol.data_curation import reduce_psi4geom_pool
+reduce_psi4geom_pool(
+    geom_dir="psi4_geoms",
+    out_dir="psi4_geoms_pruned",
+    dmin=1.5,
+    q=0.01,
+    kept_list_path="pruned_kept.txt"
+)
+```
+
+FPS selection:
+
+```python
+from moltimol.data_curation import fps_reduce_psi4geoms
+fps_reduce_psi4geoms("psi4_geoms", "psi4_geoms_fps", k=1000, start_mode="most_isolated")
+```
+
+Angular diversity histograms (cos(theta)):
+
+```python
+from moltimol.data_curation import com_axis_angle_histograms
+com_axis_angle_histograms("psi4_geoms", out_dir="angle_histograms", bins=60)
+```
