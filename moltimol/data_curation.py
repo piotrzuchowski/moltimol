@@ -118,7 +118,26 @@ def bond_length_histograms(
         combined = np.concatenate([A_all, B_all]) if B_all.size else A_all
         _plot(combined, "All intra-monomer bond lengths", "AB_combined_bonds.png")
 
+    def _stats(arr):
+        if arr.size == 0:
+            return {"mean": np.nan, "median": np.nan, "sigma": np.nan}
+        return {
+            "mean": float(np.mean(arr)),
+            "median": float(np.median(arr)),
+            "sigma": float(np.std(arr)),
+        }
+
+    stats_a = _stats(A_all)
+    stats_b = _stats(B_all)
+    stats_ab = _stats(np.concatenate([A_all, B_all]) if B_all.size else A_all)
+
     print(f"Processed {len(files)} geometries from {geom_dir}")
+    print(f"Bond length stats A_only: mean={stats_a['mean']:.6f} "
+          f"median={stats_a['median']:.6f} sigma={stats_a['sigma']:.6f}")
+    print(f"Bond length stats B_only: mean={stats_b['mean']:.6f} "
+          f"median={stats_b['median']:.6f} sigma={stats_b['sigma']:.6f}")
+    print(f"Bond length stats A+B:   mean={stats_ab['mean']:.6f} "
+          f"median={stats_ab['median']:.6f} sigma={stats_ab['sigma']:.6f}")
     print(f"Wrote histograms to {out_dir}")
 
 
