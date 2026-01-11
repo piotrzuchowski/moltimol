@@ -63,6 +63,65 @@ def intra_distance_stats(symA, symB, coordsA, coordsB):
     }
 
 
+def bond_length_histograms(
+    geom_dir,
+    out_dir="bond_histograms",
+    bins=50,
+    max_files=None,
+):
+    """
+    Create histograms of intra-monomer bond lengths for a geometry pool.
+
+    Writes PNGs:
+      - A_only_bonds.png
+      - B_only_bonds.png
+      - AB_combined_bonds.png
+    """
+    geom_dir = Path(geom_dir)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    files = sorted(geom_dir.glob("*.psi4geom"))
+    if max_files is not None:
+        files = files[: int(max_files)]
+
+    A_all = []
+    B_all = []
+    for path in files:
+        symA, symB, XA, XB, _ = parse_psi4geom_string(path.read_text())
+        d = nearest_neighbor_distances(symA, symB, XA, XB)
+        if d["A_only"].size:
+            A_all.append(d["A_only"])
+        if d["B_only"].size:
+            B_all.append(d["B_only"])
+
+    A_all = np.concatenate(A_all) if A_all else np.array([], float)
+    B_all = np.concatenate(B_all) if B_all else np.array([], float)
+
+    import matplotlib.pyplot as plt
+
+    def _plot(data, title, filename):
+        plt.figure(figsize=(6, 4))
+        plt.hist(data, bins=bins, color="#2F6B4F", edgecolor="white")
+        plt.xlabel("Bond length (angstrom)")
+        plt.ylabel("Count")
+        plt.title(title)
+        plt.tight_layout()
+        plt.savefig(out_dir / filename, dpi=150)
+        plt.close()
+
+    if A_all.size:
+        _plot(A_all, "Monomer A bond lengths", "A_only_bonds.png")
+    if B_all.size:
+        _plot(B_all, "Monomer B bond lengths", "B_only_bonds.png")
+    if A_all.size or B_all.size:
+        combined = np.concatenate([A_all, B_all]) if B_all.size else A_all
+        _plot(combined, "All intra-monomer bond lengths", "AB_combined_bonds.png")
+
+    print(f"Processed {len(files)} geometries from {geom_dir}")
+    print(f"Wrote histograms to {out_dir}")
+
+
 def cross_dist_feature(
     XA,
     XB,

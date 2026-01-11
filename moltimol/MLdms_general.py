@@ -326,6 +326,54 @@ def run_propsapt_batch(
     np.savez_compressed(out_npz, **{c: df[c].to_numpy() for c in df.columns})
 
 
+def run_sapt0_batch(
+    geom_dir="psi4_geoms",
+    batch_index=0,
+    batch_size=500,
+    out_csv=None,
+    out_npz=None,
+    basis="aug-cc-pvdz",
+    psi4_options=None,
+):
+    """
+    Run SAPT0 calculations for one batch of geometry files.
+    Writes one CSV/NPZ per batch with SAPT0 components.
+    """
+    setup_psi4_defaults(psi4_options=psi4_options)
+    psi4.set_options({"basis": basis})
+
+    geom_dir = Path(geom_dir)
+    files = sorted(geom_dir.glob("*.psi4geom"))
+    start = batch_index * batch_size
+    end = start + batch_size
+    batch_files = files[start:end]
+    if not batch_files:
+        raise ValueError("No geometry files found for this batch index.")
+
+    rows = []
+    for path in batch_files:
+        geom_id = int(path.stem.split("_")[-1])
+        geom_str = path.read_text()
+        dimer = Dimer(geom_str)
+        sapt0 = dimer.sapt0()
+        row = {"geom_id": geom_id}
+        if hasattr(sapt0, "to_dict"):
+            row.update(sapt0.to_dict())
+        elif isinstance(sapt0, dict):
+            row.update(sapt0)
+        else:
+            row["sapt0_total"] = float(sapt0)
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+    if out_csv is None:
+        out_csv = f"sapt0_batch_{batch_index:03d}.csv"
+    df.to_csv(out_csv, index=False)
+    if out_npz is None:
+        out_npz = f"sapt0_batch_{batch_index:03d}.npz"
+    np.savez_compressed(out_npz, **{c: df[c].to_numpy() for c in df.columns})
+
+
 def sample_dimer_geometries(
     n_samples=1000,
     fileA="CO.xyz",
@@ -534,6 +582,14 @@ def main():
     batch_parser.add_argument("--method-high", default=None)
     batch_parser.add_argument("--sapt0", action="store_true")
 
+    sapt0_parser = subparsers.add_parser("sapt0", help="Run SAPT0 for one batch.")
+    sapt0_parser.add_argument("--geom-dir", default="psi4_geoms")
+    sapt0_parser.add_argument("--batch-index", type=int, default=0)
+    sapt0_parser.add_argument("--batch-size", type=int, default=500)
+    sapt0_parser.add_argument("--out-csv", default=None)
+    sapt0_parser.add_argument("--out-npz", default=None)
+    sapt0_parser.add_argument("--basis", default="aug-cc-pvdz")
+
     sample_parser = subparsers.add_parser("sample", help="Sample + compute propSAPT directly.")
     sample_parser.add_argument("--n-samples", type=int, default=1000)
     sample_parser.add_argument("--fileA", default="CO.xyz")
@@ -600,6 +656,15 @@ def main():
         )
         print(f"Generated {len(samples)} samples.")
         print(dipoles.head())
+    elif args.command == "sapt0":
+        run_sapt0_batch(
+            geom_dir=args.geom_dir,
+            batch_index=args.batch_index,
+            batch_size=args.batch_size,
+            out_csv=args.out_csv,
+            out_npz=args.out_npz,
+            basis=args.basis,
+        )
 
 
 if __name__ == "__main__":
