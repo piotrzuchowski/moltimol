@@ -315,6 +315,18 @@ def run_propsapt_batch(
             dipole_body_cols[f"{col}_y"] = vec_body[1]
             dipole_body_cols[f"{col}_z"] = vec_body[2]
 
+        def _add_combined(A_prefix, B_prefix, out_prefix):
+            for axis in ("x", "y", "z"):
+                a_key = f"{A_prefix}_{axis}"
+                b_key = f"{B_prefix}_{axis}"
+                if a_key in dipole_body_cols and b_key in dipole_body_cols:
+                    dipole_body_cols[f"{out_prefix}_{axis}"] = (
+                        dipole_body_cols[a_key] + dipole_body_cols[b_key]
+                    )
+
+        _add_combined("x1_pol,r_A", "x1_exch,r_A", "x1_tot,r_A")
+        _add_combined("x1_pol,r_B", "x1_exch,r_B", "x1_tot,r_B")
+
         coord_cols, coord_order = body_frame_coord_columns(
             symA, symB, coords_body, n_atoms_A
         )
@@ -510,6 +522,18 @@ def sample_dimer_geometries(
             dipole_body_cols[f"{col}_x"] = vec_body[0]
             dipole_body_cols[f"{col}_y"] = vec_body[1]
             dipole_body_cols[f"{col}_z"] = vec_body[2]
+
+        def _add_combined(A_prefix, B_prefix, out_prefix):
+            for axis in ("x", "y", "z"):
+                a_key = f"{A_prefix}_{axis}"
+                b_key = f"{B_prefix}_{axis}"
+                if a_key in dipole_body_cols and b_key in dipole_body_cols:
+                    dipole_body_cols[f"{out_prefix}_{axis}"] = (
+                        dipole_body_cols[a_key] + dipole_body_cols[b_key]
+                    )
+
+        _add_combined("x1_pol,r_A", "x1_exch,r_A", "x1_tot,r_A")
+        _add_combined("x1_pol,r_B", "x1_exch,r_B", "x1_tot,r_B")
 
         coord_cols, coord_order = body_frame_coord_columns(
             symA, symB, coords_body, n_atoms_A
