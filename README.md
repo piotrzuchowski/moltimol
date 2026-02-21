@@ -122,6 +122,87 @@ You can also copy `mcp_server.example.json` as a starting template.
 - `bond_length_histograms`
 - `psi4geom_to_xyz`
 
+### How MCP works (for non-specialists)
+
+Think of MCP as a standard way for an AI app (like Claude Code) to ask this repo
+to do tasks safely through a local helper process.
+
+Basic flow:
+
+1. Your AI app starts `moltimol-mcp`.
+2. The app asks which tools are available.
+3. The app sends tool inputs as JSON.
+4. The server runs Python code and returns JSON results.
+
+#### JSON this MCP server accepts
+
+This setup accepts JSON at two levels:
+
+1. **Client config JSON** (how to start the server), for example:
+
+```json
+{
+  "mcpServers": {
+    "moltimol": {
+      "command": "/path/to/python",
+      "args": ["-m", "moltimol.mcp_server"],
+      "cwd": "/path/to/mol_sampler"
+    }
+  }
+}
+```
+
+2. **Tool argument JSON** (what you want to run), for example:
+
+```json
+{
+  "name": "generate_psi4geom_files",
+  "arguments": {
+    "n_samples": 500,
+    "fileA": "CO.xyz",
+    "fileB": "CO.xyz",
+    "r_min": 3.0,
+    "r_max": 8.0,
+    "out_dir": "psi4_geoms"
+  }
+}
+```
+
+Each tool accepts one JSON object with named fields (matching the tool function
+parameters in `moltimol/mcp_server.py`).
+
+#### JSON this MCP server produces
+
+Each tool returns a JSON object describing results. Example output from
+`generate_psi4geom_files`:
+
+```json
+{
+  "output_directory": "/abs/path/psi4_geoms",
+  "new_file_count": 500,
+  "total_file_count": 500,
+  "new_files_preview": ["CO_CO_000000.psi4geom", "CO_CO_000001.psi4geom"],
+  "histogram_path": "/abs/path/R_hist.png"
+}
+```
+
+Another example (`find_collisions_in_psi4_geoms`):
+
+```json
+{
+  "collision_count": 3,
+  "dmin": 1.5,
+  "collisions_preview": [
+    {"file": "psi4_geoms/CO_CO_000123.psi4geom", "dmin_ab": 1.42}
+  ]
+}
+```
+
+In short:
+
+- **Input JSON** = “what to run + parameters”.
+- **Output JSON** = “what was created/found + paths/counts/previews”.
+
 Dependency notes:
 
 - `generate_psi4geom_files`, `run_propsapt_batch`, `run_sapt0_batch`, and `sample_dimer_geometries` require `psi4` and/or `prop_sapt`.
