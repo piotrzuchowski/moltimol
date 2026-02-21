@@ -10,7 +10,13 @@ Conventions:
 
 import numpy as np
 import warnings
-import psi4
+try:
+    import psi4
+except Exception:
+    psi4 = None
+    warnings.warn(
+        "Psi4 not available. Functions that build Psi4 molecule objects will require Psi4."
+    )
 
 # Try to get atomic masses from ASE; fall back to a small built-in table.
 try:
@@ -74,6 +80,14 @@ def read_xyz(filename):
         coords.append([x, y, z])
 
     return np.array(symbols), np.array(coords)
+
+
+def _require_psi4():
+    if psi4 is None:
+        raise ImportError(
+            "Psi4 is required for this operation. Install psi4 and use an environment where it is available."
+        )
+    return psi4
 
 
 def parse_psi4geom_string(text):
@@ -368,7 +382,8 @@ def merge_monomers_jacobi_XYZ(
     for s, c in zip(symB, coords_B):
         mol_string += f"{s} {c[0]:.10f} {c[1]:.10f} {c[2]:.10f}\n"
 
-    return psi4.geometry(mol_string), symbols, coords, mol_string
+    psi4_mod = _require_psi4()
+    return psi4_mod.geometry(mol_string), symbols, coords, mol_string
 
 
 

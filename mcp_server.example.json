@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "moltimol": {
+      "command": "/path/to/python",
+      "args": ["-m", "moltimol.mcp_server"],
+      "cwd": "/path/to/mol_sampler"
+    }
+  }
+}

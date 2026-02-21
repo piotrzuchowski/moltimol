@@ -6,9 +6,6 @@ from scipy.spatial import cKDTree
 
 from moltimol import center_of_mass_mass, mass_of, parse_psi4geom_string
 
-from prop_sapt import Dimer
-
-
 def nearest_neighbor_distances(symA, symB, coordsA, coordsB):
     """
     Compute nearest-neighbor distances in canonical order.
